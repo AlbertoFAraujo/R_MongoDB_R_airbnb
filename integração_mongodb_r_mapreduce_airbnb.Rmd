@@ -1,0 +1,228 @@
+---
+message: false
+author: "Alberto Araujo"
+date: "2024-04-08"
+output:
+  html_document: 
+    theme: cosmo
+    fig_width: 12
+  message: FALSE
+title: "Integração MongoDB e R: Airbnb"
+editor_options: 
+  chunk_output_type: inline
+---
+
+**Objetivo:** Integrar os dados de uma base contida no banco de dados MongoDB e realizar um Map Reduce somente com as funções nativas do mongo para identicar as seguintes questões:
+
+1.  Total do número de avaliações dos quartos? E por faixa?
+2.  Quantas propriedades possuem acomodações acima de 2?
+3.  Quantas propriedades não aceitam nenhuma pessoa extra?
+
+**Link do dataset:** <https://insideairbnb.com/get-the-data/>
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# Ajustar as casas decimais
+options(scipen = 999, digits = 4)
+
+# Definir um espelho de CRAN
+options(repos = "http://cran.rstudio.com/")
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# Instalando os pacores necessários
+utils::install.packages("devtools")
+install.packages("mongolite")
+install.packages("plotly")
+```
+
+```{r message=FALSE, warning=FALSE, paged.print=TRUE}
+# Carregando as bibliotecas
+library(devtools)
+library(mongolite)
+library(ggplot2)
+library(dplyr)
+library(plotly)
+```
+
+```{r}
+# Criando a conexão com banco de dados
+
+con <- mongolite::mongo(
+  collection = 'airbnb',
+  db = 'dbairbnb',
+  url = 'mongodb://localhost:27017',
+  verbose = FALSE,
+  options = ssl_options()
+)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# Visualizar a conexão
+print(con)
+```
+
+```{r}
+# Visualizar os dados
+dados <- con$find()
+head(dados,1)
+```
+
+```{r}
+# Verifica o número de registros
+con$count('{}')
+```
+
+```{r}
+# Verificando o nome das variáveis (colunas)
+names(dados)
+```
+
+```{r}
+# Filtrando por query e fields no mongo
+filtro <- con$find(
+  query = '{"property_type":"House"}',
+  fields = '{"name": true,"maximum_nights": true, "price": true, "_id": false}',
+  sort = '{"price": -1}' # ordenar desc
+)
+head(filtro)
+```
+
+```{r}
+# Contagem do número de visualizações dos quartos
+resultado2 <- con$mapreduce(
+  map = "function(){
+          emit(Math.floor(this.number_of_reviews), 1)
+        }",
+  reduce = "function(id, counts){
+          return Array.sum(counts)
+          }"
+)
+
+names(resultado2) <- c('numero_reviews','contagem')
+
+```
+
+```{r fig.width=9.5, message=FALSE, warning=FALSE}
+# Gerando o gráfico do número de visualizações por propriedades
+fig <- plot_ly(resultado2, x = ~numero_reviews, y = ~contagem, type = 'bar',
+        marker = list(color = 'rgb(158,202,225)',
+                      line = list(color = 'rgb(8,48,107)',
+                                  width = 1.5)))
+fig <- fig %>% layout(title = "Número de avaliações por propriedadades",
+         xaxis = list(title = "Total de Visualizações"),
+         yaxis = list(title = "Contagem total"))
+
+fig
+```
+
+1388 propriedades não obtiveram nenhuma visualização;
+
+511 propriedades obtiveram pelo menos 1 visualização;
+
+329 propriedades obtiveram pelo menos 2 visualizações.
+
+```{r}
+# Número de visualizações por faixa
+resultado3 <- con$mapreduce(
+  map = "function(){
+            emit(Math.floor(this.number_of_reviews/100) * 100, 1)
+            }",
+  reduce = "function(id, counts){
+    return Array.sum(counts)
+  }"
+)
+
+names(resultado3) <- c('numero_reviews','contagem')
+```
+
+```{r fig.width=9.5, message=FALSE, warning=FALSE}
+# Gerando o gráfico do número de visualizações por propriedades por faixa
+
+fig <- plot_ly(resultado3, x = ~numero_reviews, y = ~contagem, type = 'bar',
+        marker = list(color = 'rgb(158,202,225)',
+                      line = list(color = 'rgb(8,48,107)',
+                                  width = 1.5)))
+fig <- fig %>% layout(title = "Número de visualizazções por faixa",
+         xaxis = list(title = "Faixa de visualizações"),
+         yaxis = list(title = "Contagem Total"))
+
+fig
+```
+
+Resumo da análise:
+
+-   5105 propriedades obtiveram entre 0 e 100 visualizações;
+
+-   351 propriedades obtiveram entre 100 e 200 visualizações;
+
+-   80 propriedades obtiveram entre 200 e 300 visualizações;
+
+-   13 propriedades obtiveram entre 300 e 400 visualizações;
+
+-   5 propriedades obtiveram entre 400 e 500 visualizações;
+
+-   1 propriedade obteve 500 ou mais visualizações.
+
+```{r}
+# Quantas propriedades possuem o maior número de quartos? E a segunda maior?
+
+resultado4 <- con$mapreduce(
+  map = "function(){
+          if (this.accommodates <= 100){
+            emit(Math.floor(this.accommodates), 1)
+          }
+        }",
+  reduce = "function(id, counts){
+          return Array.sum(counts);
+          }"
+)
+
+names(resultado4) <- c('numero_acomodações','contagem')
+resultado4 <- resultado4[order(resultado4$numero_acomodações),]
+resultado4
+```
+
+```{r fig.width=9.5}
+# Plotagem das propriedades com maiores números de quartos
+plot1 <- resultado4 %>% 
+  plot_ly(
+    x = ~numero_acomodações,
+    y = ~contagem,
+    type = 'bar',
+    text = ~contagem,
+    textposition = 'auto',
+    marker = list(color = 'rgb(158, 202, 225)',
+                  line = list(color = 'rgb(8, 48, 107)',
+                              width = 1.5)
+                  )
+  ) %>% 
+  layout(title = "Propriedades menos de 5 quartos",
+         xaxis = list(title = "Número de quartos"),
+         yaxis = list(title = "Total por número de quartos")
+         )
+
+plot1
+```
+
+2052 propriedades possuem 2 quartos e 1154 propriedades possuem 4 quartos, sendo a predominância do número de quartos
+
+```{r}
+# Quantas propriedades não aceita nenhuma pessoa extra?
+
+resultado5 <- con$mapreduce(
+  map = "function(){
+            if (this.extra_people != 0){
+              emit(this.extra_people, 1)
+            }
+        }",
+  reduce = "function(id, counts){
+          return Array.sum(counts);
+          }"
+)
+
+names(resultado5) <- c('pessoas_extras','contagem')
+resultado5 <- resultado5[order(resultado5$pessoas_extras),]
+head(resultado5)
+```
+
+3135 das propriedades listadas não aceitam pessoas extras.
