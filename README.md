@@ -5,6 +5,11 @@
 |:---:|:---:|:---:|:---:|:---:|
 | R Studio | Ggplot2 | Plotly | MongoDB | Devtools |
 
+- **RStudio:** Ambiente integrado para desenvolvimento em R, oferecendo ferramentas para escrita, execução e depuração de código.
+- **Ggplot2:** Pacote para criação de visualizações de dados elegantes e flexíveis em R.
+- **Plotly:** Biblioteca interativa para criação de gráficos e visualizações em diversas linguagens.
+- **MongoDB:** Um banco de dados NoSQL de alta performance, orientado a documentos, projetado para escalabilidade e flexibilidade.
+- **Devtools:** Conjunto de ferramentas e utilitários para desenvolvedores, incluindo bibliotecas, frameworks, ambientes de desenvolvimento integrado (IDEs) e outros recursos para facilitar o desenvolvimento de software.
 <hr>
 
 ### Objetivo: 
